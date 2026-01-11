@@ -1041,7 +1041,7 @@ type GuildChannelCreateData struct {
 	Bitrate              int                    `json:"bitrate,omitempty"`
 	UserLimit            int                    `json:"user_limit,omitempty"`
 	RateLimitPerUser     int                    `json:"rate_limit_per_user,omitempty"`
-	Position             int                    `json:"position,omitempty"`
+	Position             int                    `json:"position"`
 	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites,omitempty"`
 	ParentID             string                 `json:"parent_id,omitempty"`
 	NSFW                 bool                   `json:"nsfw,omitempty"`
