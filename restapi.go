@@ -94,6 +94,27 @@ func (e RateLimitError) Error() string {
 	return "Rate limit exceeded on " + e.URL + ", retry after " + e.RetryAfter.String()
 }
 
+// ErrRateLimited is a sentinel error returned when a rate limit is detected
+// (HTTP 429 or error code 1015). Use errors.Is(err, ErrRateLimited) to check.
+var ErrRateLimited = errors.New("rate limited")
+
+// RateLimitedError wraps information about a rate limit response.
+type RateLimitedError struct {
+	Request      *http.Request
+	Response     *http.Response
+	ResponseBody []byte
+}
+
+// Error returns a rate limit error message.
+func (e *RateLimitedError) Error() string {
+	return "rate limited: HTTP " + e.Response.Status + ", " + string(e.ResponseBody)
+}
+
+// Is allows errors.Is(err, ErrRateLimited) to work.
+func (e *RateLimitedError) Is(target error) bool {
+	return target == ErrRateLimited
+}
+
 // RequestConfig is an HTTP request configuration.
 type RequestConfig struct {
 	Request                *http.Request
@@ -283,10 +304,29 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 			err = fmt.Errorf("Exceeded Max retries HTTP %s, %s", resp.Status, response)
 		}
 	case http.StatusTooManyRequests:
+		// Check if this is error code 1015 (Cloudflare rate limit)
+		var apiErr *APIErrorMessage
+		if Unmarshal(response, &apiErr) == nil && apiErr != nil && apiErr.Code == 1015 {
+			s.log(LogError, "Rate limit detected (error code 1015) on %s", urlStr)
+			err = &RateLimitedError{
+				Request:      req,
+				Response:     resp,
+				ResponseBody: response,
+			}
+			return
+		}
+
+		// Try to parse as standard Discord rate limit
 		rl := TooManyRequests{}
 		err = Unmarshal(response, &rl)
 		if err != nil {
+			// If we can't unmarshal, treat as a generic rate limit
 			s.log(LogError, "rate limit unmarshal error, %s", err)
+			err = &RateLimitedError{
+				Request:      req,
+				Response:     resp,
+				ResponseBody: response,
+			}
 			return
 		}
 
@@ -309,6 +349,18 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		}
 		fallthrough
 	default: // Error condition
+		// Check if this is a rate limit error (error code 1015)
+		var apiErr *APIErrorMessage
+		if Unmarshal(response, &apiErr) == nil && apiErr != nil && apiErr.Code == 1015 {
+			s.log(LogError, "Rate limit detected (error code 1015) on %s", urlStr)
+			err = &RateLimitedError{
+				Request:      req,
+				Response:     resp,
+				ResponseBody: response,
+			}
+			return
+		}
+
 		err = newRestError(req, resp, response)
 	}
 
