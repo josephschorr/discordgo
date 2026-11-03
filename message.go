@@ -254,6 +254,12 @@ type MessageSend struct {
 	Flags           MessageFlags            `json:"flags,omitempty"`
 	Poll            *Poll                   `json:"poll,omitempty"`
 
+	// Nonce identifies the send, up to 25 characters. With EnforceNonce set, Discord answers a
+	// repeat from the same author within a few minutes with the original message instead of
+	// posting again.
+	Nonce        string `json:"nonce,omitempty"`
+	EnforceNonce bool   `json:"enforce_nonce,omitempty"`
+
 	// TODO: Remove this when compatibility is not required.
 	File *File `json:"-"`
 
